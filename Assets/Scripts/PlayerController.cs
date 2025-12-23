@@ -8,10 +8,10 @@ public class PlayerController : NetworkBehaviour
     public float moveSpeed = 8f;
     public float jumpForce = 12f;
     
-    // ITO ANG DINAGDAG NATIN PARA SA BOUNDARIES
     [Header("Boundary Settings")]
-    public float minX = -8f; // I-set ang limit sa kaliwa
-    public float maxX = 8f;  // I-set ang limit sa kanan
+    // NILAKIHAN ANG DEFAULT: Mula 8 ginawang 100 para hindi ka maharangan
+    public float minX = -100f; 
+    public float maxX = 100f;  
 
     [Header("Combat Settings")]
     public GameObject bulletPrefab;
@@ -32,6 +32,9 @@ public class PlayerController : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         
+        // SIGURADONG LILITAW: Pilitin ang Player sa Z=0
+        transform.position = new Vector3(transform.position.x, transform.position.y, 0);
+
         if (healthSlider != null)
         {
             healthSlider.maxValue = 100;
@@ -63,7 +66,8 @@ public class PlayerController : NetworkBehaviour
         if (isLocalPlayer)
         {
             gameObject.tag = "Player";
-            SetCameraTarget();
+            // Check kung naka-pause (Menu)
+            if (Time.timeScale != 0) SetCameraTarget();
         }
     }
 
@@ -75,7 +79,10 @@ public class PlayerController : NetworkBehaviour
 
     void Update()
     {
-        if (healthSlider != null)
+        // PIGILAN ANG LOGIC KUNG NAKA-PAUSE (MENU)
+        if (Time.timeScale == 0) return;
+
+        if (healthSlider != null && healthSlider.transform.parent != null)
         {
             healthSlider.transform.parent.rotation = Quaternion.identity;
             Vector3 currentScale = transform.localScale;
@@ -84,18 +91,22 @@ public class PlayerController : NetworkBehaviour
 
         if (!isLocalPlayer) return;
 
+        // Auto-assign camera target kung nag-resume na ang laro
+        CameraFollow cam = Object.FindFirstObjectByType<CameraFollow>();
+        if (cam != null && cam.target == null) cam.target = this.transform;
+
         HandleMovement();
         HandleJump();
         HandleShooting();
 
-        // ITO ANG LOGIC PARA SA BOUNDARIES
-        // Nililimitahan ang pwesto ng player base sa minX at maxX
+        // BOUNDARY FIX: Nililimitahan ang pwesto ng player
         float clampedX = Mathf.Clamp(transform.position.x, minX, maxX);
-        transform.position = new Vector3(clampedX, transform.position.y, transform.position.z);
+        transform.position = new Vector3(clampedX, transform.position.y, 0); 
     }
 
     void HandleMovement()
     {
+        if (rb == null) return;
         float moveX = Input.GetAxisRaw("Horizontal");
         rb.velocity = new Vector2(moveX * moveSpeed, rb.velocity.y);
 
@@ -113,6 +124,7 @@ public class PlayerController : NetworkBehaviour
 
     void HandleJump()
     {
+        if (rb == null) return;
         if ((Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Space)) && isGrounded)
         {
             rb.velocity = new Vector2(rb.velocity.x, jumpForce);
@@ -124,18 +136,25 @@ public class PlayerController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.J) || Input.GetMouseButtonDown(0))
         {
-            CmdShoot(direction);
+            // SAFE CHECK: Para hindi mag-error ang laro kung walang bala
+            if (bulletPrefab != null && shootPoint != null)
+            {
+                CmdShoot(direction);
+            }
         }
     }
 
     [Command]
     void CmdShoot(float shootDir)
     {
-        if (bulletPrefab == null || shootPoint == null) return;
+        if (bulletPrefab == null) return;
 
         GameObject bullet = Instantiate(bulletPrefab, shootPoint.position, Quaternion.identity);
-        Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
         
+        // Pilitin ang bala na mapunta sa Z=0 para lilitaw ito sa screen
+        bullet.transform.position = new Vector3(bullet.transform.position.x, bullet.transform.position.y, 0);
+
+        Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
         if (bulletRb != null) bulletRb.velocity = new Vector2(shootDir * 15f, 0);
 
         NetworkServer.Spawn(bullet);

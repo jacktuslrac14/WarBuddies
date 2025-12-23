@@ -44,7 +44,7 @@ public class MainMenuController : MonoBehaviour
         
         // I-RESUME ANG LARO
         Time.timeScale = 1; 
-        
+                
         // Panatilihing visible ang cursor para sa Network Manager
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
