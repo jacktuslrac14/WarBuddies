@@ -1,7 +1,8 @@
 using UnityEngine;
 using Mirror;
-using System.Collections;
 using TMPro;
+using UnityEngine.UI;
+using System.Collections;
 
 public class PlayerHealth : NetworkBehaviour
 {
@@ -9,115 +10,104 @@ public class PlayerHealth : NetworkBehaviour
     [SyncVar(hook = nameof(OnHPChanged))] public int currentHP = 100; 
     [SyncVar(hook = nameof(OnLivesChanged))] public int livesLeft = 5; 
 
-    private bool isDead = false; 
+    [SyncVar] private bool isInvincible = false; 
+    private float nextDamageTime;
+    public float damageCooldown = 0.8f; 
 
     [Header("UI References")]
-    public TextMeshProUGUI livesText; 
-    public GameObject loseUI; 
+    private TextMeshProUGUI livesText; 
+    private GameObject loseUI;
+    private GameObject winUI; 
+    private Slider hpSlider; 
 
-    void Start()
+    public override void OnStartClient()
     {
-        // Hanapin ang Canvas sa scene
-        GameObject canvasObj = GameObject.Find("Canvas");
+        base.OnStartClient();
+        StartCoroutine(DelayedFindUI());
+    }
 
+    IEnumerator DelayedFindUI()
+    {
+        yield return new WaitForSeconds(0.2f);
+        FindUIElements();
+        if (isLocalPlayer)
+        {
+            UpdateLivesUI(livesLeft);
+            UpdateHealthBar(currentHP);
+        }
+    }
+
+    void FindUIElements()
+    {
+        if (hpSlider == null) hpSlider = GetComponentInChildren<Slider>(true);
+        GameObject canvasObj = GameObject.Find("Canvas");
         if (canvasObj != null)
         {
-            // UPDATE: Hahanapin ang LosePanel kahit naka-disable ito sa Hierarchy
-            if (loseUI == null)
-            {
-                Transform loseTransform = canvasObj.transform.Find("LosePanel");
-                if (loseTransform != null) loseUI = loseTransform.gameObject;
-            }
-
-            // UPDATE: Hahanapin ang LivesText sa loob ng Canvas
-            if (livesText == null)
-            {
-                Transform livesTransform = canvasObj.transform.Find("LivesText");
-                if (livesTransform != null) livesText = livesTransform.GetComponent<TextMeshProUGUI>();
-            }
+            if (livesText == null) livesText = canvasObj.transform.Find("LivesText")?.GetComponent<TextMeshProUGUI>();
+            if (loseUI == null) loseUI = canvasObj.transform.Find("LosePanel")?.gameObject;
+            if (winUI == null) winUI = canvasObj.transform.Find("WinPanel")?.gameObject;
         }
+    }
 
-        // Siguraduhin na tago ang Lose UI sa umpisa
-        if (loseUI != null) loseUI.SetActive(false);
-        
-        UpdateLivesUI(livesLeft);
+    // --- MGA FUNCTIONS NA HINAHANAP NG WAVEMANAGER ---
+    public void ShowWinScreen() 
+    { 
+        if (winUI == null) FindUIElements();
+        if (winUI != null) winUI.SetActive(true); 
+        FreezePlayer(); 
+    }
+
+    public void ShowLoseScreen() 
+    { 
+        if (loseUI == null) FindUIElements();
+        if (loseUI != null) loseUI.SetActive(true); 
+        FreezePlayer(); 
+    }
+
+    void FreezePlayer()
+    {
+        var controller = GetComponent<MonoBehaviour>();
+        if (controller != null) controller.enabled = false;
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null) { rb.velocity = Vector2.zero; rb.simulated = false; }
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     [Server]
     public void TakeDamage(int amount)
     {
-        if (livesLeft <= 0 || isDead) return;
+        if (isInvincible || livesLeft <= 0) return;
+        if (Time.time < nextDamageTime) return;
+        nextDamageTime = Time.time + damageCooldown;
         currentHP -= amount;
-
         if (currentHP <= 0)
         {
             currentHP = 0; 
-            isDead = true; 
-            StartCoroutine(HostDeathSequence()); 
+            isInvincible = true; 
+            livesLeft--;
+            if (livesLeft > 0) StartCoroutine(ServerRespawn());
+            else FindObjectOfType<WaveManager>().EndGame(false);
         }
     }
 
-    IEnumerator HostDeathSequence()
+    IEnumerator ServerRespawn()
     {
-        yield return new WaitForEndOfFrame();
-        yield return new WaitForSeconds(0.15f); 
-
-        if (isServer)
-        {
-            livesLeft--; 
-
-            if (livesLeft > 0)
-            {
-                RpcTeleportPlayer();
-                currentHP = 100;
-                yield return new WaitForSeconds(1.5f);
-                isDead = false; 
-            }
-            else
-            {
-                RpcShowLoseScreen();
-            }
-        }
+        currentHP = 100;
+        RpcTeleportPlayer();
+        yield return new WaitForSeconds(2.0f);
+        isInvincible = false;
     }
 
-    void OnLivesChanged(int oldLives, int newLives) => UpdateLivesUI(newLives);
-    void OnHPChanged(int oldHP, int newHP) { }
-
-    void UpdateLivesUI(int currentLives)
-    {
-        if (livesText != null) livesText.text = "LIVES: " + currentLives;
-    }
+    void OnLivesChanged(int oldL, int newL) { if (isLocalPlayer) UpdateLivesUI(newL); }
+    void OnHPChanged(int oldH, int newH) { if (isLocalPlayer) UpdateHealthBar(newH); }
+    void UpdateLivesUI(int currentLives) { if (livesText != null) livesText.text = "LIVES: " + currentLives; }
+    void UpdateHealthBar(int hp) { if (hpSlider != null) hpSlider.value = hp; }
 
     [ClientRpc]
     void RpcTeleportPlayer()
     {
         NetworkStartPosition[] spawnPoints = Object.FindObjectsByType<NetworkStartPosition>(FindObjectsSortMode.None);
-        if (spawnPoints.Length > 0)
-        {
-            transform.position = spawnPoints[Random.Range(0, spawnPoints.Length)].transform.position;
-        }
-    }
-
-    [ClientRpc]
-    void RpcShowLoseScreen()
-    {
-        // Double check kung nahanap ang UI object para sa clients
-        if (loseUI == null)
-        {
-            GameObject canvasObj = GameObject.Find("Canvas");
-            if (canvasObj != null)
-            {
-                Transform loseTransform = canvasObj.transform.Find("LosePanel");
-                if (loseTransform != null) loseUI = loseTransform.gameObject;
-            }
-        }
-        
-        if (loseUI != null)
-        {
-            loseUI.SetActive(true); // Lalabas na ang YOU LOSE!
-            Time.timeScale = 0; 
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
+        if (spawnPoints.Length > 0) transform.position = spawnPoints[Random.Range(0, spawnPoints.Length)].transform.position;
     }
 }

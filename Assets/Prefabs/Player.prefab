@@ -133,8 +133,6 @@ MonoBehaviour:
   syncInterval: 0
   currentHP: 100
   livesLeft: 5
-  livesText: {fileID: 0}
-  loseUI: {fileID: 0}
 --- !u!212 &8250597487691850990
 SpriteRenderer:
   m_ObjectHideFlags: 0

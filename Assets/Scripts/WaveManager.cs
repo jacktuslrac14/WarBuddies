@@ -15,7 +15,6 @@ public class WaveManager : NetworkBehaviour
     [Header("UI Elements")]
     public TextMeshProUGUI waveText;
     public TextMeshProUGUI countdownText; 
-    public GameObject winUI; // I-drag ang WinPanel dito sa Inspector
 
     [Header("Wave Settings")]
     [SyncVar] public int currentWave = 0;
@@ -26,24 +25,13 @@ public class WaveManager : NetworkBehaviour
     [SyncVar] public int totalZombiesAlive = 0;
     private bool isSpawning = false;
     private bool isWaitingNextWave = false;
+    private bool gameEnded = false;
 
     void Start()
     {
-        // 1. Siguraduhing nahanap ang WinPanel kahit naka-disable
-        if (winUI == null)
-        {
-            GameObject canvasObj = GameObject.Find("Canvas");
-            if (canvasObj != null)
-            {
-                Transform winTransform = canvasObj.transform.Find("WinPanel");
-                if (winTransform != null) winUI = winTransform.gameObject;
-            }
-        }
-
-        // 2. I-disable ang lahat ng UI sa simula para hindi humarang sa Start Button
+        // Hanapin ang UI Elements sa simula
         if (waveText != null) waveText.gameObject.SetActive(false);
         if (countdownText != null) countdownText.gameObject.SetActive(false); 
-        if (winUI != null) winUI.SetActive(false); 
 
         if (isServer)
         {
@@ -54,67 +42,77 @@ public class WaveManager : NetworkBehaviour
     }
 
     [Server]
-    public void ZombieDied()
-    {
-        totalZombiesAlive--;
-        if (totalZombiesAlive < 0) totalZombiesAlive = 0;
 
-        // "Strict Check" para hindi mag-trigger ang win UI habang may zombie pa
-        if (totalZombiesAlive == 0 && !isSpawning && !isWaitingNextWave)
+    public void ZombieDied()
+{
+    if (gameEnded) return;
+    
+    totalZombiesAlive--;
+    
+    // Safety check para hindi mag-negative
+    if (totalZombiesAlive < 0) totalZombiesAlive = 0;
+
+    // "Double Check": Dapat ubos na ang i-spawn at wala na talagang kaaway sa scene
+    if (totalZombiesAlive == 0 && !isSpawning && !isWaitingNextWave)
+    {
+        // Mas siguradong check gamit ang Tag
+        GameObject[] remainingEnemies = GameObject.FindGameObjectsWithTag("Enemy");
+        
+        if (remainingEnemies.Length == 0)
         {
-            // Siguraduhin na wala na talagang objects na may tag na "Enemy"
-            if (GameObject.FindGameObjectsWithTag("Enemy").Length == 0)
+            currentWave++;
+            if (currentWave < zombiesPerSide.Length)
             {
-                currentWave++;
-                if (currentWave < zombiesPerSide.Length)
-                {
-                    StartCoroutine(StartNextWaveWithDelay());
-                }
-                else
-                {
-                    RpcShowWinScreen();
-                }
+                StartCoroutine(StartNextWaveWithDelay());
+            }
+            else
+            {
+                // Dito lang dapat lalabas ang WIN kapag wala na talagang objects sa scene
+                EndGame(true);
             }
         }
+    }
+}
+
+    [Server]
+    public void EndGame(bool isWin)
+    {
+        if (gameEnded) return;
+        gameEnded = true;
+        RpcShowGameResult(isWin);
     }
 
     [ClientRpc]
-    void RpcShowWinScreen()
+    void RpcShowGameResult(bool isWin)
     {
-        if (winUI == null)
+        Time.timeScale = 0; 
+        PlayerHealth localPlayer = NetworkClient.localPlayer?.GetComponent<PlayerHealth>();
+        if (localPlayer != null)
         {
-            GameObject canvasObj = GameObject.Find("Canvas");
-            if (canvasObj != null)
-            {
-                Transform winTransform = canvasObj.transform.Find("WinPanel");
-                if (winTransform != null) winUI = winTransform.gameObject;
-            }
-        }
-
-        if (winUI != null)
-        {
-            winUI.SetActive(true); // Lalabas na ang YOU WIN!
-            Time.timeScale = 0; 
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            // Siguraduhin na ShowWinScreen at ShowLoseScreen ang nasa PlayerHealth.cs
+            if (isWin) localPlayer.ShowWinScreen(); 
+            else localPlayer.ShowLoseScreen(); 
         }
     }
 
-    // --- Nanatili ang Spawn at UI Countdown logic mo rito ---
     [Server]
     IEnumerator StartNextWaveWithDelay()
     {
+        if (gameEnded) yield break;
         isWaitingNextWave = true;
         float timeLeft = waveBreakTime;
+
         while (timeLeft > 0)
         {
             RpcUpdateCountdownUI(Mathf.CeilToInt(timeLeft)); 
             yield return new WaitForSeconds(1f);
             timeLeft--;
         }
+
         RpcHideCountdownUI(); 
         RpcShowWaveUI(currentWave + 1);
         yield return new WaitForSeconds(2f);
+        
         isWaitingNextWave = false;
         StartCoroutine(SpawnWaveRoutine());
     }
@@ -122,7 +120,9 @@ public class WaveManager : NetworkBehaviour
     [Server]
     IEnumerator SpawnWaveRoutine()
     {
+        if (gameEnded) yield break;
         isSpawning = true;
+        
         int countToSpawn = zombiesPerSide[currentWave];
         for (int i = 0; i < countToSpawn; i++)
         {
@@ -136,6 +136,7 @@ public class WaveManager : NetworkBehaviour
     [Server]
     void SpawnZombie(Vector3 pos)
     {
+        if (zombiePrefab == null) return;
         GameObject zombie = Instantiate(zombiePrefab, pos, Quaternion.identity);
         NetworkServer.Spawn(zombie);
         totalZombiesAlive++;
@@ -144,5 +145,12 @@ public class WaveManager : NetworkBehaviour
     [ClientRpc] void RpcUpdateCountdownUI(int t) { if (countdownText != null) { countdownText.gameObject.SetActive(true); countdownText.text = "NEXT WAVE IN: " + t; } }
     [ClientRpc] void RpcHideCountdownUI() { if (countdownText != null) countdownText.gameObject.SetActive(false); }
     [ClientRpc] void RpcShowWaveUI(int w) { if (waveText != null) StartCoroutine(FlashWaveText(w)); }
-    IEnumerator FlashWaveText(int w) { waveText.text = "WAVE " + w; waveText.gameObject.SetActive(true); yield return new WaitForSeconds(2f); waveText.gameObject.SetActive(false); }
+    
+    IEnumerator FlashWaveText(int w) 
+    { 
+        waveText.text = "WAVE " + w; 
+        waveText.gameObject.SetActive(true); 
+        yield return new WaitForSeconds(2f); 
+        waveText.gameObject.SetActive(false); 
+    }
 }

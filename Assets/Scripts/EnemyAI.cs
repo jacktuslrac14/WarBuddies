@@ -6,27 +6,27 @@ public class EnemyAI : NetworkBehaviour
     [Header("Movement Settings")]
     public float speed = 3f;
     private Transform target;
+    public float searchInterval = 1f; // Mag-scan ng bagong target bawat segundo
+    private float nextSearchTime = 0f;
 
     [Header("Attack Settings")]
-    public int damageAmount = 20; // Ginawa nating 20 para sa 100 HP bar
+    public int damageAmount = 20; 
     public float attackSpeed = 1.5f; 
     private float nextAttackTime = 0f;
-
-    void Start()
-    {
-        FindTarget();
-    }
 
     [ServerCallback] 
     void Update()
     {
-        if (target == null)
+        // STEP 1: Maghanap ng pinakamalapit na player periodically
+        if (Time.time >= nextSearchTime)
         {
-            FindTarget();
-            return;
+            FindClosestTarget();
+            nextSearchTime = Time.time + searchInterval;
         }
 
-        // Paggalaw papunta sa Player
+        if (target == null) return;
+
+        // STEP 2: Paggalaw papunta sa napiling target
         Vector2 direction = (target.position - transform.position).normalized;
         transform.position = Vector2.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
 
@@ -35,30 +35,47 @@ public class EnemyAI : NetworkBehaviour
         else if (direction.x < 0) transform.localScale = new Vector3(-1, 1, 1);
     }
 
-    void FindTarget()
+    // BAGONG LOGIC: Humanap ng pinakamalapit na player sa lahat ng naka-connect
+    void FindClosestTarget()
     {
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        float shortestDistance = Mathf.Infinity;
+        GameObject closestPlayer = null;
+
+        foreach (GameObject p in players)
         {
-            target = player.transform;
+            // Siguraduhin na buhay pa ang player bago habulin (Optionally check livesLeft > 0)
+            float distanceToPlayer = Vector2.Distance(transform.position, p.transform.position);
+            
+            if (distanceToPlayer < shortestDistance)
+            {
+                shortestDistance = distanceToPlayer;
+                closestPlayer = p;
+            }
+        }
+
+        if (closestPlayer != null)
+        {
+            target = closestPlayer.transform;
         }
     }
 
     [ServerCallback]
     void OnCollisionStay2D(Collision2D other)
     {
+        // Check kung Player ang nabangga
         if (other.gameObject.CompareTag("Player") && Time.time >= nextAttackTime)
         {
             PlayerHealth playerHealth = other.gameObject.GetComponent<PlayerHealth>();
             if (playerHealth != null)
             {
+                // TakeDamage ay tatakbo sa Server side
                 playerHealth.TakeDamage(damageAmount);
                 nextAttackTime = Time.time + attackSpeed;
             }
         }
     }
 
-    // DITO ANG UPDATE: Kapag nawala ang zombie, bawasan ang counter sa WaveManager
     [ServerCallback]
     private void OnDestroy()
     {
