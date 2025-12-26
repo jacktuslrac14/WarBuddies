@@ -9,7 +9,6 @@ public class PlayerController : NetworkBehaviour
     public float jumpForce = 12f;
     
     [Header("Boundary Settings")]
-    // NILAKIHAN ANG DEFAULT: Mula 8 ginawang 100 para hindi ka maharangan
     public float minX = -100f; 
     public float maxX = 100f;  
 
@@ -25,14 +24,15 @@ public class PlayerController : NetworkBehaviour
     private float lastDamageTime;
 
     private Rigidbody2D rb;
+    private Animator anim; // Para sa animations
     private bool isGrounded;
     private float direction = 1f;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        anim = GetComponent<Animator>(); // Kunin ang animator component
         
-        // SIGURADONG LILITAW: Pilitin ang Player sa Z=0
         transform.position = new Vector3(transform.position.x, transform.position.y, 0);
 
         if (healthSlider != null)
@@ -66,7 +66,6 @@ public class PlayerController : NetworkBehaviour
         if (isLocalPlayer)
         {
             gameObject.tag = "Player";
-            // Check kung naka-pause (Menu)
             if (Time.timeScale != 0) SetCameraTarget();
         }
     }
@@ -79,7 +78,6 @@ public class PlayerController : NetworkBehaviour
 
     void Update()
     {
-        // PIGILAN ANG LOGIC KUNG NAKA-PAUSE (MENU)
         if (Time.timeScale == 0) return;
 
         if (healthSlider != null && healthSlider.transform.parent != null)
@@ -91,7 +89,6 @@ public class PlayerController : NetworkBehaviour
 
         if (!isLocalPlayer) return;
 
-        // Auto-assign camera target kung nag-resume na ang laro
         CameraFollow cam = Object.FindFirstObjectByType<CameraFollow>();
         if (cam != null && cam.target == null) cam.target = this.transform;
 
@@ -99,7 +96,6 @@ public class PlayerController : NetworkBehaviour
         HandleJump();
         HandleShooting();
 
-        // BOUNDARY FIX: Nililimitahan ang pwesto ng player
         float clampedX = Mathf.Clamp(transform.position.x, minX, maxX);
         transform.position = new Vector3(clampedX, transform.position.y, 0); 
     }
@@ -109,6 +105,13 @@ public class PlayerController : NetworkBehaviour
         if (rb == null) return;
         float moveX = Input.GetAxisRaw("Horizontal");
         rb.velocity = new Vector2(moveX * moveSpeed, rb.velocity.y);
+
+        // SYNC WALK/IDLE ANIMATION
+        if (anim != null)
+        {
+            // Gamitin ang velocity magnitude para sa Speed parameter
+            anim.SetFloat("Speed", Mathf.Abs(moveX)); 
+        }
 
         if (moveX > 0) 
         {
@@ -136,10 +139,11 @@ public class PlayerController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.J) || Input.GetMouseButtonDown(0))
         {
-            // SAFE CHECK: Para hindi mag-error ang laro kung walang bala
             if (bulletPrefab != null && shootPoint != null)
             {
                 CmdShoot(direction);
+                // I-play ang animation sa local player agad para mabilis ang response
+                if (anim != null) anim.SetTrigger("Shoot");
             }
         }
     }
@@ -150,15 +154,27 @@ public class PlayerController : NetworkBehaviour
         if (bulletPrefab == null) return;
 
         GameObject bullet = Instantiate(bulletPrefab, shootPoint.position, Quaternion.identity);
-        
-        // Pilitin ang bala na mapunta sa Z=0 para lilitaw ito sa screen
         bullet.transform.position = new Vector3(bullet.transform.position.x, bullet.transform.position.y, 0);
 
         Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
         if (bulletRb != null) bulletRb.velocity = new Vector2(shootDir * 15f, 0);
 
         NetworkServer.Spawn(bullet);
+        
+        // I-sync ang putok sa ibang players
+        RpcOnShoot();
+        
         Destroy(bullet, 2.0f);
+    }
+
+    [ClientRpc]
+    void RpcOnShoot()
+    {
+        // I-play ang shoot animation sa lahat maliban sa local player (kasi nag-play na sa local)
+        if (!isLocalPlayer && anim != null)
+        {
+            anim.SetTrigger("Shoot");
+        }
     }
 
     [Server]

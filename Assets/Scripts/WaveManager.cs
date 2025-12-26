@@ -29,7 +29,6 @@ public class WaveManager : NetworkBehaviour
 
     void Start()
     {
-        // Hanapin ang UI Elements sa simula
         if (waveText != null) waveText.gameObject.SetActive(false);
         if (countdownText != null) countdownText.gameObject.SetActive(false); 
 
@@ -41,38 +40,59 @@ public class WaveManager : NetworkBehaviour
         }
     }
 
+    // --- BAGONG FUNCTION PARA MAWALA ANG ERROR SA PLAYERHEALTH ---
     [Server]
-
-    public void ZombieDied()
-{
-    if (gameEnded) return;
-    
-    totalZombiesAlive--;
-    
-    // Safety check para hindi mag-negative
-    if (totalZombiesAlive < 0) totalZombiesAlive = 0;
-
-    // "Double Check": Dapat ubos na ang i-spawn at wala na talagang kaaway sa scene
-    if (totalZombiesAlive == 0 && !isSpawning && !isWaitingNextWave)
+    public void CheckGameOverCondition()
     {
-        // Mas siguradong check gamit ang Tag
-        GameObject[] remainingEnemies = GameObject.FindGameObjectsWithTag("Enemy");
-        
-        if (remainingEnemies.Length == 0)
+        if (gameEnded) return;
+
+        // Hanapin lahat ng PlayerHealth sa scene
+        PlayerHealth[] allPlayers = Object.FindObjectsByType<PlayerHealth>(FindObjectsSortMode.None);
+        bool anyoneAlive = false;
+
+        foreach (PlayerHealth p in allPlayers)
         {
-            currentWave++;
-            if (currentWave < zombiesPerSide.Length)
+            // Kung may kahit isang player na may livesLeft pa, tuloy ang laro
+            if (p.livesLeft > 0)
             {
-                StartCoroutine(StartNextWaveWithDelay());
+                anyoneAlive = true;
+                break;
             }
-            else
+        }
+
+        // Kung wala na talagang buhay ang lahat, doon lang mag-EndGame
+        if (!anyoneAlive)
+        {
+            EndGame(false);
+        }
+    }
+
+    [Server]
+    public void ZombieDied()
+    {
+        if (gameEnded) return;
+        
+        totalZombiesAlive--;
+        if (totalZombiesAlive < 0) totalZombiesAlive = 0;
+
+        if (totalZombiesAlive == 0 && !isSpawning && !isWaitingNextWave)
+        {
+            GameObject[] remainingEnemies = GameObject.FindGameObjectsWithTag("Enemy");
+            
+            if (remainingEnemies.Length == 0)
             {
-                // Dito lang dapat lalabas ang WIN kapag wala na talagang objects sa scene
-                EndGame(true);
+                currentWave++;
+                if (currentWave < zombiesPerSide.Length)
+                {
+                    StartCoroutine(StartNextWaveWithDelay());
+                }
+                else
+                {
+                    EndGame(true);
+                }
             }
         }
     }
-}
 
     [Server]
     public void EndGame(bool isWin)
@@ -89,7 +109,6 @@ public class WaveManager : NetworkBehaviour
         PlayerHealth localPlayer = NetworkClient.localPlayer?.GetComponent<PlayerHealth>();
         if (localPlayer != null)
         {
-            // Siguraduhin na ShowWinScreen at ShowLoseScreen ang nasa PlayerHealth.cs
             if (isWin) localPlayer.ShowWinScreen(); 
             else localPlayer.ShowLoseScreen(); 
         }

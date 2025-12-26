@@ -20,6 +20,13 @@ public class PlayerHealth : NetworkBehaviour
     private GameObject winUI; 
     private Slider hpSlider; 
 
+    private Animator anim; // Para sa death animation
+
+    void Start()
+    {
+        anim = GetComponent<Animator>(); // Kunin ang animator component
+    }
+
     public override void OnStartClient()
     {
         base.OnStartClient();
@@ -49,7 +56,6 @@ public class PlayerHealth : NetworkBehaviour
         }
     }
 
-    // --- MGA FUNCTIONS NA HINAHANAP NG WAVEMANAGER ---
     public void ShowWinScreen() 
     { 
         if (winUI == null) FindUIElements();
@@ -66,10 +72,13 @@ public class PlayerHealth : NetworkBehaviour
 
     void FreezePlayer()
     {
-        var controller = GetComponent<MonoBehaviour>();
-        if (controller != null) controller.enabled = false;
+        // I-disable ang PlayerController para hindi na makagalaw o makabaril
+        PlayerController pc = GetComponent<PlayerController>();
+        if (pc != null) pc.enabled = false;
+
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null) { rb.velocity = Vector2.zero; rb.simulated = false; }
+        
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
     }
@@ -81,13 +90,43 @@ public class PlayerHealth : NetworkBehaviour
         if (Time.time < nextDamageTime) return;
         nextDamageTime = Time.time + damageCooldown;
         currentHP -= amount;
+        
         if (currentHP <= 0)
         {
             currentHP = 0; 
             isInvincible = true; 
             livesLeft--;
-            if (livesLeft > 0) StartCoroutine(ServerRespawn());
-            else FindObjectOfType<WaveManager>().EndGame(false);
+            
+            if (livesLeft > 0) 
+            {
+                StartCoroutine(ServerRespawn());
+            }
+            else 
+            {
+                // Kung 0 na ang lives, i-sync ang death animation sa lahat
+                RpcPlayerEliminated();
+                
+                // Sabihan ang WaveManager na i-check kung tapos na ang laro
+                WaveManager wm = Object.FindFirstObjectByType<WaveManager>();
+                if (wm != null) wm.CheckGameOverCondition();
+            }
+        }
+    }
+
+    [ClientRpc]
+    void RpcPlayerEliminated()
+    {
+        // I-trigger ang DeadAni sa lahat ng clients
+        if (anim != null) anim.SetBool("IsDead", true);
+
+        if (isLocalPlayer)
+        {
+            ShowLoseScreen();
+        }
+        else
+        {
+            // I-disable ang collider para hindi na harang ang bangkay sa buhay na players
+            GetComponent<Collider2D>().enabled = false;
         }
     }
 
