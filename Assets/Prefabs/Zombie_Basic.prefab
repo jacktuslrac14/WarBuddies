@@ -16,6 +16,8 @@ GameObject:
   - component: {fileID: 4519435601838391015}
   - component: {fileID: -7602578835864941709}
   - component: {fileID: 5236005884061880939}
+  - component: {fileID: 2763723163049169922}
+  - component: {fileID: 3156178650653429420}
   m_Layer: 0
   m_Name: Zombie_Basic
   m_TagString: Enemy
@@ -77,11 +79,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_SortingLayerID: 379157181
-  m_SortingLayer: 3
-  m_SortingOrder: 0
-  m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 0, g: 0.5245282, b: 0.05775995, a: 1}
+  m_SortingLayerID: -299673833
+  m_SortingLayer: 7
+  m_SortingOrder: 10
+  m_Sprite: {fileID: 1424988628, guid: 475a8d45358653749b0e4306cb997d10, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -106,7 +108,7 @@ Rigidbody2D:
   m_Mass: 100
   m_LinearDrag: 5
   m_AngularDrag: 0.05
-  m_GravityScale: 1
+  m_GravityScale: 0
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -150,11 +152,11 @@ BoxCollider2D:
   m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
-  m_Offset: {x: 0, y: 0}
+  m_Offset: {x: 0, y: 0.52}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 1, y: 1}
+    oldSize: {x: 4, y: 4}
     newSize: {x: 1, y: 1}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -230,8 +232,10 @@ MonoBehaviour:
   syncMode: 0
   syncInterval: 0
   speed: 3
+  searchInterval: 1
   damageAmount: 10
   attackSpeed: 1.5
+  attackRange: 1.2
 --- !u!114 &5236005884061880939
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -249,6 +253,44 @@ MonoBehaviour:
   syncInterval: 0
   health: 100
   healthSlider: {fileID: 0}
+--- !u!95 &2763723163049169922
+Animator:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3129360437992235446}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 8bd2e7c8ebe56464fbdc0165d7ce3502, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &3156178650653429420
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3129360437992235446}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f6f3bf89aa97405989c802ba270f815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncDirection: 1
+  syncMode: 0
+  syncInterval: 0
+  clientAuthority: 0
+  animator: {fileID: 2763723163049169922}
 --- !u!1 &5121838467369059243
 GameObject:
   m_ObjectHideFlags: 0

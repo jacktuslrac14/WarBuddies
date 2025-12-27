@@ -6,36 +6,66 @@ public class EnemyAI : NetworkBehaviour
     [Header("Movement Settings")]
     public float speed = 3f;
     private Transform target;
-    public float searchInterval = 1f; // Mag-scan ng bagong target bawat segundo
+    public float searchInterval = 1f; 
     private float nextSearchTime = 0f;
 
     [Header("Attack Settings")]
     public int damageAmount = 20; 
     public float attackSpeed = 1.5f; 
     private float nextAttackTime = 0f;
+    public float attackRange = 1.2f; // Gaano kalapit dapat para umatake
+
+    private Animator anim;
+
+    void Start()
+    {
+        anim = GetComponent<Animator>();
+    }
 
     [ServerCallback] 
     void Update()
     {
-        // STEP 1: Maghanap ng pinakamalapit na player periodically
         if (Time.time >= nextSearchTime)
         {
             FindClosestTarget();
             nextSearchTime = Time.time + searchInterval;
         }
 
-        if (target == null) return;
+        if (target == null) 
+        {
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
 
-        // STEP 2: Paggalaw papunta sa napiling target
-        Vector2 direction = (target.position - transform.position).normalized;
-        transform.position = Vector2.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
+        float distance = Vector2.Distance(transform.position, target.position);
 
-        // Flip ang Sprite depende sa direction
-        if (direction.x > 0) transform.localScale = new Vector3(1, 1, 1);
-        else if (direction.x < 0) transform.localScale = new Vector3(-1, 1, 1);
+        // KUNG MALAYO PA: Maglakad papunta sa player
+        if (distance > attackRange)
+        {
+            transform.position = Vector2.MoveTowards(transform.position, target.position, speed * Time.deltaTime);
+            if (anim != null) anim.SetFloat("Speed", speed);
+        }
+        // KUNG MALAPIT NA: Huminto at Umatake
+        else 
+        {
+            if (anim != null) anim.SetFloat("Speed", 0f); // I-set sa Idle ang animation
+
+            if (Time.time >= nextAttackTime)
+            {
+                if (anim != null) anim.SetTrigger("Attack"); // Paganahin ang kagat
+                
+                PlayerHealth ph = target.GetComponent<PlayerHealth>();
+                if (ph != null) ph.TakeDamage(damageAmount);
+                
+                nextAttackTime = Time.time + attackSpeed;
+            }
+        }
+
+        // Flip Sprite
+        if (target.position.x > transform.position.x) transform.localScale = new Vector3(1, 1, 1);
+        else if (target.position.x < transform.position.x) transform.localScale = new Vector3(-1, 1, 1);
     }
 
-    // BAGONG LOGIC: Humanap ng pinakamalapit na player sa lahat ng naka-connect
     void FindClosestTarget()
     {
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
@@ -44,45 +74,11 @@ public class EnemyAI : NetworkBehaviour
 
         foreach (GameObject p in players)
         {
-            // Siguraduhin na buhay pa ang player bago habulin (Optionally check livesLeft > 0)
-            float distanceToPlayer = Vector2.Distance(transform.position, p.transform.position);
-            
-            if (distanceToPlayer < shortestDistance)
-            {
-                shortestDistance = distanceToPlayer;
-                closestPlayer = p;
-            }
+            PlayerHealth ph = p.GetComponent<PlayerHealth>();
+            if (ph != null && ph.livesLeft <= 0) continue; 
+            float d = Vector2.Distance(transform.position, p.transform.position);
+            if (d < shortestDistance) { shortestDistance = d; closestPlayer = p; }
         }
-
-        if (closestPlayer != null)
-        {
-            target = closestPlayer.transform;
-        }
-    }
-
-    [ServerCallback]
-    void OnCollisionStay2D(Collision2D other)
-    {
-        // Check kung Player ang nabangga
-        if (other.gameObject.CompareTag("Player") && Time.time >= nextAttackTime)
-        {
-            PlayerHealth playerHealth = other.gameObject.GetComponent<PlayerHealth>();
-            if (playerHealth != null)
-            {
-                // TakeDamage ay tatakbo sa Server side
-                playerHealth.TakeDamage(damageAmount);
-                nextAttackTime = Time.time + attackSpeed;
-            }
-        }
-    }
-
-    [ServerCallback]
-    private void OnDestroy()
-    {
-        WaveManager waveManager = Object.FindFirstObjectByType<WaveManager>();
-        if (waveManager != null)
-        {
-            waveManager.ZombieDied();
-        }
+        if (closestPlayer != null) target = closestPlayer.transform;
     }
 }
