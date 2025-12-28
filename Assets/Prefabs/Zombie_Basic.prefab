@@ -235,7 +235,7 @@ MonoBehaviour:
   searchInterval: 1
   damageAmount: 10
   attackSpeed: 1
-  attackRange: 1.5
+  attackRange: 1.3
 --- !u!114 &5236005884061880939
 MonoBehaviour:
   m_ObjectHideFlags: 0
