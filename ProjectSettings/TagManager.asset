@@ -60,9 +60,9 @@ TagManager:
   - name: Title
     uniqueID: 1976888517
     locked: 0
-  - name: Player
-    uniqueID: 3293550271
-    locked: 0
   - name: Enemy
     uniqueID: 3995293463
+    locked: 0
+  - name: Player
+    uniqueID: 3293550271
     locked: 0

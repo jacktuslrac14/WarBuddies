@@ -13,7 +13,8 @@ public class EnemyAI : NetworkBehaviour
     public int damageAmount = 20; 
     public float attackSpeed = 1.5f; 
     private float nextAttackTime = 0f;
-    public float attackRange = 1.2f; // Gaano kalapit dapat para umatake
+    // TINAASAN NATIN ITO: Gawin mong 1.5f sa Inspector para hindi sila masyadong dikit
+    public float attackRange = 1.5f; 
 
     private Animator anim;
 
@@ -48,11 +49,11 @@ public class EnemyAI : NetworkBehaviour
         // KUNG MALAPIT NA: Huminto at Umatake
         else 
         {
-            if (anim != null) anim.SetFloat("Speed", 0f); // I-set sa Idle ang animation
+            if (anim != null) anim.SetFloat("Speed", 0f);
 
             if (Time.time >= nextAttackTime)
             {
-                if (anim != null) anim.SetTrigger("Attack"); // Paganahin ang kagat
+                if (anim != null) anim.SetTrigger("Attack");
                 
                 PlayerHealth ph = target.GetComponent<PlayerHealth>();
                 if (ph != null) ph.TakeDamage(damageAmount);
@@ -61,9 +62,12 @@ public class EnemyAI : NetworkBehaviour
             }
         }
 
-        // Flip Sprite
-        if (target.position.x > transform.position.x) transform.localScale = new Vector3(1, 1, 1);
-        else if (target.position.x < transform.position.x) transform.localScale = new Vector3(-1, 1, 1);
+        // Flip Sprite Fix: Sinisigurado na hindi mag-log error kung biglang mawala ang target
+        if (target != null)
+        {
+            if (target.position.x > transform.position.x) transform.localScale = new Vector3(1, 1, 1);
+            else if (target.position.x < transform.position.x) transform.localScale = new Vector3(-1, 1, 1);
+        }
     }
 
     void FindClosestTarget()
@@ -80,5 +84,6 @@ public class EnemyAI : NetworkBehaviour
             if (d < shortestDistance) { shortestDistance = d; closestPlayer = p; }
         }
         if (closestPlayer != null) target = closestPlayer.transform;
+        else target = null; // Reset target kung patay na lahat
     }
 }

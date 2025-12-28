@@ -23,36 +23,32 @@ public class WaveManager : NetworkBehaviour
     public float waveBreakTime = 5f; 
 
     [SyncVar] public int totalZombiesAlive = 0;
-    private bool isSpawning = false;
     private bool isWaitingNextWave = false;
     private bool gameEnded = false;
 
-    void Start()
+    public override void OnStartServer()
     {
-        if (waveText != null) waveText.gameObject.SetActive(false);
-        if (countdownText != null) countdownText.gameObject.SetActive(false); 
-
-        if (isServer)
-        {
-            currentWave = 0;
-            totalZombiesAlive = 0;
-            StartCoroutine(StartNextWaveWithDelay());
-        }
+        base.OnStartServer();
+        if (waveText != null) RpcHideWaveUI();
+        if (countdownText != null) RpcHideCountdownUI(); 
+        
+        currentWave = 0;
+        totalZombiesAlive = 0;
+        gameEnded = false;
+        StartCoroutine(StartNextWaveWithDelay());
     }
 
-    // --- BAGONG FUNCTION PARA MAWALA ANG ERROR SA PLAYERHEALTH ---
+    // --- SOLUTION TO YOUR ERROR: CheckGameOverCondition ---
     [Server]
     public void CheckGameOverCondition()
     {
         if (gameEnded) return;
 
-        // Hanapin lahat ng PlayerHealth sa scene
         PlayerHealth[] allPlayers = Object.FindObjectsByType<PlayerHealth>(FindObjectsSortMode.None);
         bool anyoneAlive = false;
 
         foreach (PlayerHealth p in allPlayers)
         {
-            // Kung may kahit isang player na may livesLeft pa, tuloy ang laro
             if (p.livesLeft > 0)
             {
                 anyoneAlive = true;
@@ -60,7 +56,6 @@ public class WaveManager : NetworkBehaviour
             }
         }
 
-        // Kung wala na talagang buhay ang lahat, doon lang mag-EndGame
         if (!anyoneAlive)
         {
             EndGame(false);
@@ -75,42 +70,19 @@ public class WaveManager : NetworkBehaviour
         totalZombiesAlive--;
         if (totalZombiesAlive < 0) totalZombiesAlive = 0;
 
-        if (totalZombiesAlive == 0 && !isSpawning && !isWaitingNextWave)
+        Debug.Log($"Zombie Died. Remaining: {totalZombiesAlive}");
+
+        if (totalZombiesAlive == 0 && !isWaitingNextWave)
         {
             GameObject[] remainingEnemies = GameObject.FindGameObjectsWithTag("Enemy");
-            
-            if (remainingEnemies.Length == 0)
+            if (remainingEnemies.Length <= 1) 
             {
                 currentWave++;
                 if (currentWave < zombiesPerSide.Length)
-                {
                     StartCoroutine(StartNextWaveWithDelay());
-                }
                 else
-                {
                     EndGame(true);
-                }
             }
-        }
-    }
-
-    [Server]
-    public void EndGame(bool isWin)
-    {
-        if (gameEnded) return;
-        gameEnded = true;
-        RpcShowGameResult(isWin);
-    }
-
-    [ClientRpc]
-    void RpcShowGameResult(bool isWin)
-    {
-        Time.timeScale = 0; 
-        PlayerHealth localPlayer = NetworkClient.localPlayer?.GetComponent<PlayerHealth>();
-        if (localPlayer != null)
-        {
-            if (isWin) localPlayer.ShowWinScreen(); 
-            else localPlayer.ShowLoseScreen(); 
         }
     }
 
@@ -140,16 +112,16 @@ public class WaveManager : NetworkBehaviour
     IEnumerator SpawnWaveRoutine()
     {
         if (gameEnded) yield break;
-        isSpawning = true;
         
         int countToSpawn = zombiesPerSide[currentWave];
+        totalZombiesAlive = countToSpawn * 2; 
+
         for (int i = 0; i < countToSpawn; i++)
         {
             SpawnZombie(spawnLeft.position);
             SpawnZombie(spawnRight.position);
             yield return new WaitForSeconds(spawnInterval);
         }
-        isSpawning = false; 
     }
 
     [Server]
@@ -158,11 +130,12 @@ public class WaveManager : NetworkBehaviour
         if (zombiePrefab == null) return;
         GameObject zombie = Instantiate(zombiePrefab, pos, Quaternion.identity);
         NetworkServer.Spawn(zombie);
-        totalZombiesAlive++;
     }
 
+    // --- UI RPCs ---
     [ClientRpc] void RpcUpdateCountdownUI(int t) { if (countdownText != null) { countdownText.gameObject.SetActive(true); countdownText.text = "NEXT WAVE IN: " + t; } }
     [ClientRpc] void RpcHideCountdownUI() { if (countdownText != null) countdownText.gameObject.SetActive(false); }
+    [ClientRpc] void RpcHideWaveUI() { if (waveText != null) waveText.gameObject.SetActive(false); }
     [ClientRpc] void RpcShowWaveUI(int w) { if (waveText != null) StartCoroutine(FlashWaveText(w)); }
     
     IEnumerator FlashWaveText(int w) 
@@ -172,4 +145,7 @@ public class WaveManager : NetworkBehaviour
         yield return new WaitForSeconds(2f); 
         waveText.gameObject.SetActive(false); 
     }
+
+    [Server] public void EndGame(bool isWin) { if (gameEnded) return; gameEnded = true; RpcShowGameResult(isWin); }
+    [ClientRpc] void RpcShowGameResult(bool isWin) { Time.timeScale = 0; PlayerHealth localPlayer = NetworkClient.localPlayer?.GetComponent<PlayerHealth>(); if (localPlayer != null) { if (isWin) localPlayer.ShowWinScreen(); else localPlayer.ShowLoseScreen(); } }
 }

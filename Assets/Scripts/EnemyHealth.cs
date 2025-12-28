@@ -8,12 +8,11 @@ public class EnemyHealth : NetworkBehaviour
     public int health = 100;
     
     public Slider healthSlider;
+    private bool hasSentDeathSignal = false; // FLAG: Para hindi mag-negative ang wave count
 
     void Start()
     {
-        // Kusang hahanapin ang Slider para hindi mo na kailangang i-drag
         if (healthSlider == null) healthSlider = GetComponentInChildren<Slider>();
-
         if (healthSlider != null)
         {
             healthSlider.maxValue = health;
@@ -24,13 +23,29 @@ public class EnemyHealth : NetworkBehaviour
     [Server]
     public void TakeDamage(int amount)
     {
+        if (health <= 0) return;
+
         health -= amount;
         if (health <= 0)
         {
-            WaveManager wm = Object.FindFirstObjectByType<WaveManager>();
-            if (wm != null) wm.ZombieDied();
-            NetworkServer.Destroy(gameObject);
+            Die();
         }
+    }
+
+    [Server]
+    void Die()
+    {
+        if (hasSentDeathSignal) return;
+        hasSentDeathSignal = true;
+
+        WaveManager wm = Object.FindFirstObjectByType<WaveManager>();
+        if (wm != null) 
+        {
+            wm.ZombieDied();
+            Debug.Log("Zombie Died - Signal sent to WaveManager");
+        }
+
+        NetworkServer.Destroy(gameObject);
     }
 
     void OnHealthChanged(int oldHealth, int newHealth)
